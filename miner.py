@@ -14,6 +14,21 @@ from sklearn.feature_extraction.text import TfidfVectorizer  # pip install sciki
 import os
 import urllib2
 
+def is_integer(s):
+    try:
+        int(s)
+        return True
+    except ValueError:
+        return False
+
+def reformat_str(inputstr):
+    returnStr = ""
+    tempStrArr = re.findall(r'\S+', inputstr) # split input string to temporary string array, based on whitespace,tab and \n
+    for tempStr in tempStrArr:
+        if not is_integer(tempStr): # ignore integer strings
+            returnStr += (tempStr.lower() + " ") # make it lowercase and append it to end of result string with 1-char whitespace delimiter
+    return returnStr
+
 def convert(fname, pages=None):
     if not pages:
         pagenums = set()
@@ -32,7 +47,7 @@ def convert(fname, pages=None):
     converter.close()
     text = output.getvalue()
     output.close
-    return text
+    return reformat_str(text) # reformat string before returning
 
 docs = []
 options = Options()
@@ -68,10 +83,10 @@ if pageSource != "": # if result page source is not empty
 
 
 
-#tfidf = TfidfVectorizer() TODO fix whitespaces between words
+tfidf = TfidfVectorizer()
 
-#response = tfidf.fit_transform(docs)
+response = tfidf.fit_transform(docs)
 
-#feature_names = tfidf.get_feature_names()
-#for col in response.nonzero()[1]:
-#    print (feature_names[col], ' - ', response[0, col])
+feature_names = tfidf.get_feature_names()
+for col in response.nonzero()[1]:
+    print (feature_names[col], ' - ', response[0, col])
