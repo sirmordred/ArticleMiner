@@ -14,18 +14,17 @@ from sklearn.feature_extraction.text import TfidfVectorizer  # pip install sciki
 import os
 import urllib2
 
-def is_integer(s):
+def only_contain_letters(word):
     try:
-        int(s)
-        return True
-    except ValueError:
+        return word.encode('ascii').isalpha()
+    except:
         return False
 
 def reformat_str(inputstr):
     returnStr = ""
     tempStrArr = re.findall(r'\S+', inputstr) # split input string to temporary string array, based on whitespace,tab and \n
     for tempStr in tempStrArr:
-        if not is_integer(tempStr): # ignore integer strings
+        if only_contain_letters(tempStr): # ignore non-alphabetic strings
             returnStr += (tempStr.lower() + " ") # make it lowercase and append it to end of result string with 1-char whitespace delimiter
     return returnStr
 
