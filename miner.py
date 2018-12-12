@@ -12,6 +12,7 @@ from pdfminer.layout import LAParams
 from pdfminer.pdfpage import PDFPage
 from sklearn.feature_extraction.text import TfidfVectorizer  # pip install scikit-learn
 import os
+import re
 import urllib2
 
 def only_contain_letters(word):
@@ -28,7 +29,7 @@ def reformat_str(inputstr):
             returnStr += (tempStr.lower() + " ") # make it lowercase and append it to end of result string with 1-char whitespace delimiter
     return returnStr
 
-def convert(fname, pages=None):
+def get_text_from_pdf(fname, pages=None):
     if not pages:
         pagenums = set()
     else:
@@ -48,44 +49,58 @@ def convert(fname, pages=None):
     output.close
     return reformat_str(text) # reformat string before returning
 
-docs = []
-options = Options()
-options.set_headless(True) # do not open browser in gui
-browser = webdriver.Firefox(options=options)
-browser.get("http://www.semanticscholar.org/search?q=\"Ali Fuat Alkaya\"&sort=relevance&pdf=true")
-count = 1
-delay = 10 # should be enough
-try:
-    myElem = WebDriverWait(browser, delay).until(EC.presence_of_element_located((By.CLASS_NAME, 'result-count')))
-except TimeoutException:
-    print ("Loading took too much time!")
-pageSource = browser.page_source
-if pageSource != "": # if result page source is not empty
-    htmlRet = html.fromstring(pageSource) # convert it to html object
-    links = htmlRet.xpath('//a/@href') # get all urls which are in href attributes of html object
-    if len(links) > 0:
-        current_directory = os.getcwd()
-        final_directory = os.path.join(current_directory, r'alkaya')
-        if not os.path.exists(final_directory): # create dir if it is not exist
-            os.makedirs(final_directory)
+def func(instr):
+    return float(instr.split('-')[1])
 
-            for link in links:
-                if link.startswith('https://pdfs') == True: # it is the link what we want(pdf's link) !!!
-                    final_pdf_path = os.path.join(final_directory, str(count) + ".pdf") # it will download to '.../Alkaya/1.pdf'
-                    filedata = urllib2.urlopen(link) # Download it!
-                    datatowrite = filedata.read()
-                    with open(final_pdf_path, 'wb') as pdfFile:  
-                        pdfFile.write(datatowrite)
-                    # download finished, extract text from it and save it to the docs array
-                    docs.append(convert(final_pdf_path))
-                    count += 1
+def download_articles(author):
+    pdf_dir = os.path.join(os.getcwd(), author) # get path of pdf dir
+    if not os.path.exists(pdf_dir): # check existence
+        options = Options()
+        options.set_headless(True) # do not open browser in gui
+        browser = webdriver.Firefox(options=options)
+        browser.get("http://www.semanticscholar.org/search?q=\"" + author + "\"&sort=relevance&pdf=true")
+        count = 1
+        delay = 10 # should be enough
+        try:
+            myElem = WebDriverWait(browser, delay).until(EC.presence_of_element_located((By.CLASS_NAME, 'result-count')))
+        except TimeoutException:
+            print ("Loading took too much time!")
+        pageSource = browser.page_source
+        if pageSource != "": # if result page source is not empty
+            htmlRet = html.fromstring(pageSource) # convert it to html object
+            links = htmlRet.xpath('//a/@href') # get all urls which are in href attributes of html object
+            if len(links) > 0:
+                os.makedirs(pdf_dir) # create directory which will hold all article pdfs
+                for link in links:
+                    if link.startswith('https://pdfs') == True: # it is the link what we want(pdf's link) !!!
+                        final_pdf_path = os.path.join(pdf_dir, str(count) + ".pdf") # it will download to '.../Alkaya/1.pdf'
+                        filedata = urllib2.urlopen(link) # Download it!
+                        datatowrite = filedata.read()
+                        with open(final_pdf_path, 'wb') as pdfFile:  
+                            pdfFile.write(datatowrite)
+                        count += 1
 
+def articles_to_documents(author): # returns list of documents (to send tfidvectorizer)
+    docs = []
+    pdf_directory = os.path.join(os.getcwd(), author)
+    for filename in os.listdir(pdf_directory):
+        if filename.endswith(".pdf"):
+            docs.append(get_text_from_pdf(os.path.join(pdf_directory, filename)))
+    return docs
 
+download_articles('Ali Fuat Alkaya')
+corpus = articles_to_documents('Ali Fuat Alkaya')
 
 tfidf = TfidfVectorizer()
 
-response = tfidf.fit_transform(docs)
+response = tfidf.fit_transform(corpus)
 
 feature_names = tfidf.get_feature_names()
+unsortedList = []
 for col in response.nonzero()[1]:
-    print (feature_names[col], ' - ', response[0, col])
+#    print('{0: <20} {1}'.format(feature_names[col],response[0, col]))
+    unsortedList.append(feature_names[col] + '-' + str(response[0, col]))
+
+sortedList = sorted(unsortedList,key=func,reverse=True)
+for outstr in sortedList:
+    print(outstr)
