@@ -15,6 +15,9 @@ import os
 import re
 import urllib2
 import csv
+from wordcloud import WordCloud # pip install wordcloud, pip install matplotlib, apt-get install python-tk
+import numpy as np
+from PIL import Image
 
 STOP_WORDS = [ # taken from https://github.com/scikit-learn/scikit-learn/blob/master/sklearn/feature_extraction/stop_words.py and added extra scientific stop words like 'introduction', 'university'
     "a", "about", "above", "across", "after", "afterwards", "again", "against",
@@ -148,8 +151,19 @@ def write_to_csv(output_list, is_tf):
             word_value = row_array[1]
             csv_writer.writerow([word, word_value])
 
+def generate_wordcloud(author, doclist):
+    data = ""
+    for docElem in doclist:
+        data += docElem
+    marmara_mask = np.array(Image.open("mu.png"))
+    wc = WordCloud(background_color ='white',
+                    mask=marmara_mask,
+                    max_words=2000).generate(data)
+    wc.to_file(author+"_wordcloud.png")
+
 download_articles('Ali Fuat Alkaya')
 corpus = articles_to_documents('Ali Fuat Alkaya')
+generate_wordcloud('Ali Fuat Alkaya',corpus)
 
 tfidf = TfidfVectorizer()
 
