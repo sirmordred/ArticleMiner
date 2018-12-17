@@ -14,6 +14,51 @@ from sklearn.feature_extraction.text import TfidfVectorizer  # pip install sciki
 import os
 import re
 import urllib2
+import csv
+
+STOP_WORDS = [ # taken from https://github.com/scikit-learn/scikit-learn/blob/master/sklearn/feature_extraction/stop_words.py and added extra scientific stop words like 'introduction', 'university'
+    "a", "about", "above", "across", "after", "afterwards", "again", "against",
+    "all", "almost", "alone", "along", "already", "also", "although", "always",
+    "am", "among", "amongst", "amoungst", "amount", "an", "and", "another",
+    "any", "anyhow", "anyone", "anything", "anyway", "anywhere", "are",
+    "around", "as", "at", "back", "be", "became", "because", "become",
+    "becomes", "becoming", "been", "before", "beforehand", "behind", "being",
+    "below", "beside", "besides", "between", "beyond", "bill", "both",
+    "bottom", "but", "by", "call", "can", "cannot", "cant", "co", "con",
+    "could", "couldnt", "cry", "de", "describe", "detail", "do", "done",
+    "down", "due", "during", "each", "eg", "eight", "either", "eleven", "else",
+    "elsewhere", "empty", "enough", "etc", "even", "ever", "every", "everyone",
+    "everything", "everywhere", "except", "few", "fifteen", "fifty", "fill",
+    "find", "fire", "first", "five", "for", "former", "formerly", "forty",
+    "found", "four", "from", "front", "full", "further", "get", "give", "go",
+    "had", "has", "hasnt", "have", "he", "hence", "her", "here", "hereafter",
+    "hereby", "herein", "hereupon", "hers", "herself", "him", "himself", "his",
+    "how", "however", "hundred", "i", "ie", "if", "in", "inc", "indeed",
+    "interest", "into", "is", "it", "its", "itself", "keep", "last", "latter",
+    "latterly", "least", "less", "ltd", "made", "many", "may", "me",
+    "meanwhile", "might", "mill", "mine", "more", "moreover", "most", "mostly",
+    "move", "much", "must", "my", "myself", "name", "namely", "neither",
+    "never", "nevertheless", "next", "nine", "no", "nobody", "none", "noone",
+    "nor", "not", "nothing", "now", "nowhere", "of", "off", "often", "on",
+    "once", "one", "only", "onto", "or", "other", "others", "otherwise", "our",
+    "ours", "ourselves", "out", "over", "own", "part", "per", "perhaps",
+    "please", "put", "rather", "re", "same", "see", "seem", "seemed",
+    "seeming", "seems", "serious", "several", "she", "should", "show", "side",
+    "since", "sincere", "six", "sixty", "so", "some", "somehow", "someone",
+    "something", "sometime", "sometimes", "somewhere", "still", "such",
+    "system", "take", "ten", "than", "that", "the", "their", "them",
+    "themselves", "then", "thence", "there", "thereafter", "thereby",
+    "therefore", "therein", "thereupon", "these", "they", "thick", "thin",
+    "third", "this", "those", "though", "three", "through", "throughout",
+    "thru", "thus", "to", "together", "too", "top", "toward", "towards",
+    "twelve", "twenty", "two", "un", "under", "until", "up", "upon", "us",
+    "very", "via", "was", "we", "well", "were", "what", "whatever", "when",
+    "whence", "whenever", "where", "whereafter", "whereas", "whereby",
+    "wherein", "whereupon", "wherever", "whether", "which", "while", "whither",
+    "who", "whoever", "whole", "whom", "whose", "why", "will", "with",
+    "within", "without", "would", "yet", "you", "your", "yours", "yourself", "yourselves", 
+    "abstract", "introduction", "conclusions", "related", "work", "author", "university", # extra stop_words row
+    "solution", "solutions", "problem", "problems"] # extra stop_words row
 
 def only_contain_letters(word):
     try:
@@ -21,20 +66,19 @@ def only_contain_letters(word):
     except:
         return False
 
-def reformat_str(inputstr):
+def pre_process_document(inputstr):
     returnStr = ""
-    tempStrArr = re.findall(r'\S+', inputstr) # split input string to temporary string array, based on whitespace,tab and \n
+    tempInputStr = inputstr.replace('"', ' ') # there may be some quoted words too
+    tempStrArr = re.findall(r'\S+', tempInputStr) # split input string to temporary string array, based on whitespace,tab and \n
     for tempStr in tempStrArr:
-        if only_contain_letters(tempStr): # ignore non-alphabetic strings
-            returnStr += (tempStr.lower() + " ") # make it lowercase and append it to end of result string with 1-char whitespace delimiter
+        if len(tempStr) > 1 and only_contain_letters(tempStr): # ignore chars(1-char strings) and non-alphabetic strings
+            tempStrLow = tempStr.lower() # make it lowercase before searching it in stop_words_list
+            if tempStrLow not in STOP_WORDS:
+                returnStr += (tempStrLow + " ") # if its not in stop_words_list, append it to end of result string with 1-char whitespace delimiter
     return returnStr
 
-def get_text_from_pdf(fname, pages=None):
-    if not pages:
-        pagenums = set()
-    else:
-        pagenums = set(pages)
-
+def pdf_to_document(fname):
+    pagenums = set()
     output = StringIO()
     manager = PDFResourceManager()
     converter = TextConverter(manager, output, laparams=LAParams())
@@ -47,7 +91,7 @@ def get_text_from_pdf(fname, pages=None):
     converter.close()
     text = output.getvalue()
     output.close
-    return reformat_str(text) # reformat string before returning
+    return text
 
 def func(instr):
     return float(instr.split('-')[1])
@@ -85,8 +129,24 @@ def articles_to_documents(author): # returns list of documents (to send tfidvect
     pdf_directory = os.path.join(os.getcwd(), author)
     for filename in os.listdir(pdf_directory):
         if filename.endswith(".pdf"):
-            docs.append(get_text_from_pdf(os.path.join(pdf_directory, filename)))
+            dirtyDoc = pdf_to_document(os.path.join(pdf_directory, filename)) # extract text from pdf
+            cleanDoc = pre_process_document(dirtyDoc) # strip/remove non-alphabetic chars like digits, quotes and also remove stop_words
+            docs.append(cleanDoc) # append result document to docs array
     return docs
+
+def write_to_csv(output_list, is_tf):
+    outputFile = 'defaultOutputValues.csv'
+    if is_tf:
+        outputFile = 'tf_list.csv'
+    else:
+        outputFile = 'tfidf_list.csv'
+    with open(outputFile, mode='w') as csv_output_file:
+        csv_writer = csv.writer(csv_output_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+        for row_output_list in output_list:
+            row_array = row_output_list.split(',')
+            word = row_array[0]
+            word_value = row_array[1]
+            csv_writer.writerow([word, word_value])
 
 download_articles('Ali Fuat Alkaya')
 corpus = articles_to_documents('Ali Fuat Alkaya')
