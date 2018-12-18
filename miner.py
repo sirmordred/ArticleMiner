@@ -127,14 +127,36 @@ def download_articles(author):
                             pdfFile.write(datatowrite)
                         count += 1
 
-def articles_to_documents(author): # returns list of documents (to send tfidvectorizer)
-    docs = []
+def contain_documents(author):
     pdf_directory = os.path.join(os.getcwd(), author)
-    for filename in os.listdir(pdf_directory):
-        if filename.endswith(".pdf"):
-            dirtyDoc = pdf_to_document(os.path.join(pdf_directory, filename)) # extract text from pdf
-            cleanDoc = pre_process_document(dirtyDoc) # strip/remove non-alphabetic chars like digits, quotes and also remove stop_words
-            docs.append(cleanDoc) # append result document to docs array
+    if os.path.exists(pdf_directory): # check existence
+        for filename in os.listdir(pdf_directory):
+            if filename.endswith(".txt"):
+                return True
+    return False
+
+def articles_to_documents(author): # returns list of documents (to send tfidvectorizer)
+    cnt = 1
+    pdf_directory = os.path.join(os.getcwd(), author)
+    if os.path.exists(pdf_directory) and not contain_documents(author): # only run if pdf files are exist and txt files are not
+        for filename in os.listdir(pdf_directory):
+            if filename.endswith(".pdf"):
+                dirtyDoc = pdf_to_document(os.path.join(pdf_directory, filename)) # extract text from pdf
+                cleanDoc = pre_process_document(dirtyDoc) # strip/remove non-alphabetic chars like digits, quotes and also remove stop_words
+                final_txt_path = os.path.join(pdf_directory, str(cnt) + ".txt")
+                with open(final_txt_path, 'wb') as txtFile:  
+                                    txtFile.write(cleanDoc) # write cleaned document to txt
+                cnt += 1
+
+def get_documents(author):
+    docs = []
+    txt_directory = os.path.join(os.getcwd(), author)
+    for filename in os.listdir(txt_directory):
+        if filename.endswith(".txt"):
+            final_txt_path = os.path.join(txt_directory, filename)
+            with open(final_txt_path, 'r') as txtFile:
+                doc=txtFile.read().replace('\n', '')
+            docs.append(doc) # append document to docs array
     return docs
 
 def write_to_csv(output_list, is_tf):
@@ -156,13 +178,16 @@ def generate_wordcloud(author, doclist):
     for docElem in doclist:
         data += docElem
     marmara_mask = np.array(Image.open("mu.png"))
-    wc = WordCloud(background_color ='white',
+    wc = WordCloud(collocations=False,
+                    background_color ='white',
                     mask=marmara_mask,
                     max_words=2000).generate(data)
     wc.to_file(author+"_wordcloud.png")
 
 download_articles('Ali Fuat Alkaya')
-corpus = articles_to_documents('Ali Fuat Alkaya')
+articles_to_documents('Ali Fuat Alkaya')
+corpus = get_documents('Ali Fuat Alkaya')
+
 generate_wordcloud('Ali Fuat Alkaya',corpus)
 
 tfidf = TfidfVectorizer()
