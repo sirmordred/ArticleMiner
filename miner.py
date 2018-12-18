@@ -13,6 +13,8 @@ from pdfminer.pdfpage import PDFPage
 from sklearn.feature_extraction.text import TfidfVectorizer  # pip install scikit-learn
 import os
 import re
+import math
+import from collections import Counter
 import urllib2
 import csv
 from wordcloud import WordCloud # pip install wordcloud, pip install matplotlib, apt-get install python-tk
@@ -183,6 +185,57 @@ def generate_wordcloud(author, doclist):
                     mask=marmara_mask,
                     max_words=2000).generate(data)
     wc.to_file(author+"_wordcloud.png")
+    
+def getNumOfOccurInDoc(word, docArray):
+    cnt = 0
+    for dc in docArray:
+        if word == dc:
+            cnt += 1
+    return cnt
+
+def getNumOfOccurInCorpus(word, doclist):
+    cnt = 0
+    contains = False
+    for dc in doclist:
+        dcArr = re.findall(r'\S+', dc) # split doc into words-array
+        for d in dcArr:
+            if word == d:
+                contains = True
+                break # if doc contains given word, break the loop and increment counter
+        if contains:
+            cnt += 1
+            contains = False
+    return cnt
+
+def getTfValues(doclist): # returns list of dictionary (dictionary per document)
+    resultList = []
+    for doc in doclist:
+        docArr = re.findall(r'\S+', doc)
+        sizeOfDocArr = len(docArr)
+        docSet = set(docArr)
+        docDic = {}
+        for ds in docSet:
+            docDic[ds] = getNumOfOccurInDoc(ds, docArr) / float(sizeOfDocArr) # divide total word count by total number of word in doc
+        resultList.append(docDic)
+    return resultList
+
+def getIDFValues(doclist): # returns dictionary (dictionary of all corpus)
+    corpus = ""
+    for doc in doclist:
+        corpus += (doc + ' ')
+    corpusArr = re.findall(r'\S+', corpus)
+    corpusSet = set(corpusArr) # remove duplicate items
+    corpusDic = {}
+    for ds in corpusSet:
+       corpusDic[ds] =  math.log10(float(len(doclist)) / getNumOfOccurInCorpus(ds,doclist))
+    return corpusDic
+
+def getMostCommonNItem(listOfValues, n):
+    result = []
+    cnt = Counter(listOfValues)
+    for k, v in cnt.most_common(n):
+        result.append(k)
+    return result
 
 download_articles('Ali Fuat Alkaya')
 articles_to_documents('Ali Fuat Alkaya')
