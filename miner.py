@@ -1,9 +1,9 @@
-from selenium import webdriver  # pip install selenium NOTE: also geckodriver must be in PATH
+from selenium import webdriver  # pip install selenium
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
 from selenium.common.exceptions import TimeoutException
-from selenium.webdriver.firefox.options import Options
+from selenium.webdriver.chrome.options import Options
 from lxml import html
 from cStringIO import StringIO
 from pdfminer.pdfinterp import PDFResourceManager, PDFPageInterpreter  # pip install pdfminer
@@ -12,14 +12,20 @@ from pdfminer.layout import LAParams
 from pdfminer.pdfpage import PDFPage
 from sklearn.feature_extraction.text import TfidfVectorizer  # pip install scikit-learn
 import os
+import stat
 import re
 import math
-import from collections import Counter
+from collections import Counter
 import urllib2
 import csv
 from wordcloud import WordCloud # pip install wordcloud, pip install matplotlib, apt-get install python-tk
 import numpy as np
 from PIL import Image
+import platform
+import wget # pip install wget
+from zipfile import ZipFile
+
+CHROMEDRIVER_PATH = "chromedriver"
 
 STOP_WORDS = [ # taken from https://github.com/scikit-learn/scikit-learn/blob/master/sklearn/feature_extraction/stop_words.py and added extra scientific stop words like 'introduction', 'university'
     "a", "about", "above", "across", "after", "afterwards", "again", "against",
@@ -105,8 +111,8 @@ def download_articles(author):
     pdf_dir = os.path.join(os.getcwd(), author) # get path of pdf dir
     if not os.path.exists(pdf_dir): # check existence
         options = Options()
-        options.set_headless(True) # do not open browser in gui
-        browser = webdriver.Firefox(options=options)
+        options.add_argument("--headless") # do not open browser in gui
+        browser = webdriver.Chrome(executable_path=CHROMEDRIVER_PATH, chrome_options=options)
         browser.get("http://www.semanticscholar.org/search?q=\"" + author + "\"&sort=relevance&pdf=true")
         count = 1
         delay = 10 # should be enough
@@ -230,6 +236,23 @@ def getIDFValues(doclist): # returns dictionary (dictionary of all corpus)
        corpusDic[ds] =  math.log10(float(len(doclist)) / getNumOfOccurInCorpus(ds,doclist))
     return corpusDic
 
+def getParticularIDF(word, idfDict):
+    for k, v in idfDict.iteritems():
+        if k == word:
+            return float(v)
+    return float(0)
+
+def getTfIDFValues(doclist): # return list of dictionary (dictionary per document)
+    resultList = []
+    tfValsDictList = getTfValues(doclist)
+    idfValsDict = getIDFValues(doclist)
+    for tfValsDict in tfValsDictList:
+        docTfIDFDic = {}
+        for tfWord, tfVal in tfValsDict.iteritems():
+            docTfIDFDic[tfWord] =  tfVal * getParticularIDF(tfWord, idfValsDict) # tf * idf and save it to doc_cnt_dictionary(doc_1_dict)
+        resultList.append(docTfIDFDic)
+    return resultList
+
 def getMostCommonNItem(listOfValues, n):
     result = []
     cnt = Counter(listOfValues)
@@ -237,22 +260,42 @@ def getMostCommonNItem(listOfValues, n):
         result.append(k)
     return result
 
+def prepareChromedriver():
+    osName = platform.system()
+    chromedriverbin_path = ""
+    chromedriver_name = ""
+    chromedriver_download_url = ""
+    osType = 0
+    if 'Linux' in osName:
+        chromedriver_name = "chromedriver"
+        chromedriverbin_path = os.path.join(os.getcwd(), chromedriver_name)
+        chromedriver_download_url = "https://chromedriver.storage.googleapis.com/2.45/chromedriver_linux64.zip"
+    elif 'Darwin' in osName:
+        chromedriver_name = "chromedriver"
+        chromedriverbin_path = os.path.join(os.getcwd(), chromedriver_name)
+        chromedriver_download_url = "https://chromedriver.storage.googleapis.com/2.45/chromedriver_mac64.zip"
+        osType = 1
+    else:
+        chromedriver_name = "chromedriver.exe"
+        chromedriverbin_path = os.path.join(os.getcwd(), chromedriver_name)
+        chromedriver_download_url = "https://chromedriver.storage.googleapis.com/2.45/chromedriver_win32.zip"
+        osType = 2
+
+    if not os.path.exists(chromedriverbin_path): # check existence
+        print('Downloading chromedriver...')
+        downloadedFName = wget.download(chromedriver_download_url)
+        with ZipFile(os.path.join(os.getcwd(), downloadedFName), 'r') as zip_ref:
+            zip_ref.extractall(os.getcwd())
+        st = os.stat(chromedriver_name)
+        os.chmod(chromedriver_name, st.st_mode | 0111) # make it executable by everyone
+
+    return chromedriverbin_path
+
+CHROMEDRIVER_PATH = prepareChromedriver()
 download_articles('Ali Fuat Alkaya')
+'''
 articles_to_documents('Ali Fuat Alkaya')
 corpus = get_documents('Ali Fuat Alkaya')
 
 generate_wordcloud('Ali Fuat Alkaya',corpus)
-
-tfidf = TfidfVectorizer()
-
-response = tfidf.fit_transform(corpus)
-
-feature_names = tfidf.get_feature_names()
-unsortedList = []
-for col in response.nonzero()[1]:
-#    print('{0: <20} {1}'.format(feature_names[col],response[0, col]))
-    unsortedList.append(feature_names[col] + '-' + str(response[0, col]))
-
-sortedList = sorted(unsortedList,key=func,reverse=True)
-for outstr in sortedList:
-    print(outstr)
+'''
