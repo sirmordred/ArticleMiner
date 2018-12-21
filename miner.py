@@ -16,6 +16,7 @@ import stat
 import re
 import math
 from collections import Counter
+from collections import OrderedDict
 import urllib2
 import csv
 from wordcloud import WordCloud # pip install wordcloud, pip install matplotlib, apt-get install python-tk
@@ -167,19 +168,11 @@ def get_documents(author):
             docs.append(doc) # append document to docs array
     return docs
 
-def write_to_csv(output_list, is_tf):
-    outputFile = 'defaultOutputValues.csv'
-    if is_tf:
-        outputFile = 'tf_list.csv'
-    else:
-        outputFile = 'tfidf_list.csv'
-    with open(outputFile, mode='w') as csv_output_file:
+def write_to_csv(outputFileName, output_data_dict):
+    with open(outputFileName, mode='w') as csv_output_file:
         csv_writer = csv.writer(csv_output_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
-        for row_output_list in output_list:
-            row_array = row_output_list.split(',')
-            word = row_array[0]
-            word_value = row_array[1]
-            csv_writer.writerow([word, word_value])
+        for word, val in output_data_dict.iteritems():
+            csv_writer.writerow([word, val])
 
 def generate_wordcloud(author, doclist):
     data = ""
@@ -213,15 +206,30 @@ def getNumOfOccurInCorpus(word, doclist):
             contains = False
     return cnt
 
+def getMostFrequent50Word(doc):
+    result = []
+    docWordArr = re.findall(r'\S+', doc)
+    cnt = Counter(docWordArr)
+    for k, v in cnt.most_common(50):
+        result.append(k)
+    return result
+
+def isWordFrequent(word, frequentWordList):
+    for frequentWord in frequentWordList:
+        if word == frequentWord:
+            return True
+    return False
+
 def getTfValues(doclist): # returns list of dictionary (dictionary per document)
     resultList = []
     for doc in doclist:
-        docArr = re.findall(r'\S+', doc)
-        sizeOfDocArr = len(docArr)
+        mostFrequent50Word = getMostFrequent50Word(doc) # get most frequent 50 word in document
+        docArr = re.findall(r'\S+', doc) 
         docSet = set(docArr)
         docDic = {}
         for ds in docSet:
-            docDic[ds] = getNumOfOccurInDoc(ds, docArr) / float(sizeOfDocArr) # divide total word count by total number of word in doc
+            if isWordFrequent(ds, mostFrequent50Word):
+                docDic[ds] = getNumOfOccurInDoc(ds, docArr) / float(len(docArr)) # divide total word count by total number of word in doc
         resultList.append(docDic)
     return resultList
 
@@ -253,13 +261,6 @@ def getTfIDFValues(doclist): # return list of dictionary (dictionary per documen
         resultList.append(docTfIDFDic)
     return resultList
 
-def getMostCommonNItem(listOfValues, n):
-    result = []
-    cnt = Counter(listOfValues)
-    for k, v in cnt.most_common(n):
-        result.append(k)
-    return result
-
 def prepareChromedriver():
     osName = platform.system()
     chromedriverbin_path = ""
@@ -275,7 +276,7 @@ def prepareChromedriver():
         chromedriverbin_path = os.path.join(os.getcwd(), chromedriver_name)
         chromedriver_download_url = "https://chromedriver.storage.googleapis.com/2.45/chromedriver_mac64.zip"
         osType = 1
-    else:
+    else: # windows
         chromedriver_name = "chromedriver.exe"
         chromedriverbin_path = os.path.join(os.getcwd(), chromedriver_name)
         chromedriver_download_url = "https://chromedriver.storage.googleapis.com/2.45/chromedriver_win32.zip"
@@ -291,11 +292,35 @@ def prepareChromedriver():
 
     return chromedriverbin_path
 
+##### PREPARATION STAGE BEGIN ######
 CHROMEDRIVER_PATH = prepareChromedriver()
+
 download_articles('Ali Fuat Alkaya')
-'''
 articles_to_documents('Ali Fuat Alkaya')
 corpus = get_documents('Ali Fuat Alkaya')
+##### PREPARATION STAGE END ######
 
-generate_wordcloud('Ali Fuat Alkaya',corpus)
-'''
+##### WRITING RESULT STAGE BEGIN ######
+temp_dir = os.path.join(os.getcwd(), 'Ali Fuat Alkaya')
+resultDir = os.path.join(temp_dir, 'Results')
+if not os.path.exists(resultDir): # if result dir is not exist, create it
+    os.makedirs(resultDir)
+
+cnt = 1
+tfDictionaryList = getTfValues(corpus) # write tf values of each pdf
+for tfDictionary in tfDictionaryList:
+    sortedTfDictionary = OrderedDict(sorted(tfDictionary.items(), key=lambda v: v[1], reverse=True))
+    resultTfListCsv = os.path.join(resultDir, 'Pdf' + str(cnt) + '_tf_list.csv')
+    write_to_csv(resultTfListCsv, sortedTfDictionary)
+    cnt += 1
+
+cnt = 1
+tfIDFDictionaryList = getTfIDFValues(corpus) # write tfidf values of each pdf
+for tfIDFDictionary in tfIDFDictionaryList:
+    sortedTfIDFListCsv = OrderedDict(sorted(tfIDFDictionary.items(), key=lambda v: v[1], reverse=True))
+    resultTfIDFListCsv = os.path.join(resultDir, 'Pdf' + str(cnt) + '_tfidf_list.csv')
+    write_to_csv(resultTfIDFListCsv, sortedTfIDFListCsv)
+    cnt += 1
+##### WRITING RESULT STAGE END ######
+
+# generate_wordcloud('Ali Fuat Alkaya',corpus) TODO use it
