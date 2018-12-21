@@ -1,3 +1,12 @@
+import os
+import stat
+import re
+import math
+from collections import Counter
+from collections import OrderedDict
+import urllib2
+import csv
+import platform
 from selenium import webdriver  # pip install selenium
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -10,23 +19,11 @@ from pdfminer.pdfinterp import PDFResourceManager, PDFPageInterpreter  # pip ins
 from pdfminer.converter import TextConverter
 from pdfminer.layout import LAParams
 from pdfminer.pdfpage import PDFPage
-from sklearn.feature_extraction.text import TfidfVectorizer  # pip install scikit-learn
-import os
-import stat
-import re
-import math
-from collections import Counter
-from collections import OrderedDict
-import urllib2
-import csv
 from wordcloud import WordCloud # pip install wordcloud, pip install matplotlib, apt-get install python-tk
 import numpy as np
 from PIL import Image
-import platform
 import wget # pip install wget
 from zipfile import ZipFile
-
-CHROMEDRIVER_PATH = "chromedriver"
 
 STOP_WORDS = [ # taken from https://github.com/scikit-learn/scikit-learn/blob/master/sklearn/feature_extraction/stop_words.py and added extra scientific stop words like 'introduction', 'university'
     "a", "about", "above", "across", "after", "afterwards", "again", "against",
@@ -72,6 +69,8 @@ STOP_WORDS = [ # taken from https://github.com/scikit-learn/scikit-learn/blob/ma
     "abstract", "introduction", "conclusions", "related", "work", "author", "university", # extra stop_words row
     "solution", "solutions", "problem", "problems"] # extra stop_words row
 
+CHROMEDRIVER_PATH = "chromedriver"
+
 def only_contain_letters(word):
     try:
         return word.encode('ascii').isalpha()
@@ -104,9 +103,6 @@ def pdf_to_document(fname):
     text = output.getvalue()
     output.close
     return text
-
-def func(instr):
-    return float(instr.split('-')[1])
 
 def download_articles(author):
     pdf_dir = os.path.join(os.getcwd(), author) # get path of pdf dir
@@ -171,19 +167,19 @@ def get_documents(author):
 def write_to_csv(outputFileName, output_data_dict):
     with open(outputFileName, mode='w') as csv_output_file:
         csv_writer = csv.writer(csv_output_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
-        for word, val in output_data_dict.iteritems():
+        for word, val in output_data_dict.iteritems(): # iterate on the dictionary
             csv_writer.writerow([word, val])
 
-def generate_wordcloud(author, doclist):
-    data = ""
-    for docElem in doclist:
-        data += docElem
+def generate_wordcloud(resultdict, output_file):
+    for k, v in resultdict.iteritems():
+        if v == 0: # HACK: wordcloud library crashes with 0(zero) values in dictionary, so replace 0 with minimum float value
+            resultdict[k] = float(float(1) / 1000000)
     marmara_mask = np.array(Image.open("mu.png"))
     wc = WordCloud(collocations=False,
                     background_color ='white',
                     mask=marmara_mask,
-                    max_words=2000).generate(data)
-    wc.to_file(author+"_wordcloud.png")
+                    max_words=75).generate_from_frequencies(resultdict)
+    wc.to_file(output_file)
     
 def getNumOfOccurInDoc(word, docArray):
     cnt = 0
@@ -220,12 +216,12 @@ def isWordFrequent(word, frequentWordList):
             return True
     return False
 
-def getTfValues(doclist): # returns list of dictionary (dictionary per document)
+def getTfValues(doclist): # returns list of dictionary (dictionary per document) [dict1, dict2....]
     resultList = []
     for doc in doclist:
         mostFrequent50Word = getMostFrequent50Word(doc) # get most frequent 50 word in document
         docArr = re.findall(r'\S+', doc) 
-        docSet = set(docArr)
+        docSet = set(docArr) # remove duplicate items
         docDic = {}
         for ds in docSet:
             if isWordFrequent(ds, mostFrequent50Word):
@@ -233,7 +229,7 @@ def getTfValues(doclist): # returns list of dictionary (dictionary per document)
         resultList.append(docDic)
     return resultList
 
-def getIDFValues(doclist): # returns dictionary (dictionary of all corpus)
+def getIDFValues(doclist): # returns dictionary (dictionary of all corpus) {word1: idfVal1, word2: idfVal2}
     corpus = ""
     for doc in doclist:
         corpus += (doc + ' ')
@@ -292,35 +288,46 @@ def prepareChromedriver():
 
     return chromedriverbin_path
 
-##### PREPARATION STAGE BEGIN ######
-CHROMEDRIVER_PATH = prepareChromedriver()
+def main():
+    authorName = raw_input("Example run: Ali Fuat Alkaya\nExample run: Haluk Topcuoglu\nPlease enter name of faculty member which you want to analyze his/her publications: ")
+    print('\nAnalyzing process started...')
+    print('It may take up to 4-5 minute since it downloads a lot of pdfs(publications) and processing it(for looping each word) so be patient :) thanx')
 
-download_articles('Ali Fuat Alkaya')
-articles_to_documents('Ali Fuat Alkaya')
-corpus = get_documents('Ali Fuat Alkaya')
-##### PREPARATION STAGE END ######
+    ##### PREPARATION STAGE BEGIN ######
+    CHROMEDRIVER_PATH = prepareChromedriver() # download(wget) chromedriver binary to current working directory location(its used for automatic-article-downloader function which is download_articles())
 
-##### WRITING RESULT STAGE BEGIN ######
-temp_dir = os.path.join(os.getcwd(), 'Ali Fuat Alkaya')
-resultDir = os.path.join(temp_dir, 'Results')
-if not os.path.exists(resultDir): # if result dir is not exist, create it
-    os.makedirs(resultDir)
+    download_articles(authorName)
+    articles_to_documents(authorName) # extract all words from pdf and remove non-alphabetic characters like */.; etc. (alsor emove stop-words) and save them to txt files (for faster later run)
+    corpus = get_documents(authorName) # read processed txt files and make a list of strings [doc1Str, doc2Str...]
+    ##### PREPARATION STAGE END ######
 
-cnt = 1
-tfDictionaryList = getTfValues(corpus) # write tf values of each pdf
-for tfDictionary in tfDictionaryList:
-    sortedTfDictionary = OrderedDict(sorted(tfDictionary.items(), key=lambda v: v[1], reverse=True))
-    resultTfListCsv = os.path.join(resultDir, 'Pdf' + str(cnt) + '_tf_list.csv')
-    write_to_csv(resultTfListCsv, sortedTfDictionary)
-    cnt += 1
+    ##### WRITING RESULT STAGE BEGIN ######
+    temp_dir = os.path.join(os.getcwd(), authorName)
+    resultDir = os.path.join(temp_dir, 'Results')
+    if not os.path.exists(resultDir): # if result dir is not exist, create it
+        os.makedirs(resultDir)
 
-cnt = 1
-tfIDFDictionaryList = getTfIDFValues(corpus) # write tfidf values of each pdf
-for tfIDFDictionary in tfIDFDictionaryList:
-    sortedTfIDFListCsv = OrderedDict(sorted(tfIDFDictionary.items(), key=lambda v: v[1], reverse=True))
-    resultTfIDFListCsv = os.path.join(resultDir, 'Pdf' + str(cnt) + '_tfidf_list.csv')
-    write_to_csv(resultTfIDFListCsv, sortedTfIDFListCsv)
-    cnt += 1
-##### WRITING RESULT STAGE END ######
+    cnt = 1
+    tfDictionaryList = getTfValues(corpus) # write tf values of each pdf
+    for tfDictionary in tfDictionaryList:
+        resultTfListCsvPath = os.path.join(resultDir, 'Pdf' + str(cnt) + '_tf_list.csv')
+        resultTfWordCloudPath = os.path.join(resultDir, 'Pdf' + str(cnt) + '_tf_wordcloud.pdf')
+        sortedTfDictionary = OrderedDict(sorted(tfDictionary.items(), key=lambda v: v[1], reverse=True)) # sort tf dictionary as descending
+        generate_wordcloud(sortedTfDictionary, resultTfWordCloudPath) # generate wordcloud based off of tfidf_list of that document
+        write_to_csv(resultTfListCsvPath, sortedTfDictionary)
+        cnt += 1
 
-# generate_wordcloud('Ali Fuat Alkaya',corpus) TODO use it
+    cnt = 1
+    tfIDFDictionaryList = getTfIDFValues(corpus) # write tfidf values of each pdf
+    for tfIDFDictionary in tfIDFDictionaryList:
+        resultTfIDFListCsvPath = os.path.join(resultDir, 'Pdf' + str(cnt) + '_tfidf_list.csv')
+        resultTfIDFWordCloudPath = os.path.join(resultDir, 'Pdf' + str(cnt) + '_tfidf_wordcloud.pdf')
+        sortedTfIDFDictionary = OrderedDict(sorted(tfIDFDictionary.items(), key=lambda v: v[1], reverse=True)) # sort tfidf dictionary as descending
+        generate_wordcloud(sortedTfIDFDictionary, resultTfIDFWordCloudPath) # generate wordcloud based off of tfidf_list of that document
+        write_to_csv(resultTfIDFListCsvPath, sortedTfIDFDictionary) # create Pdf{Count}_tfidf_list.csv
+        cnt += 1
+    ##### WRITING RESULT STAGE END ######
+    print('Analyzing finished. Please check out results located in: ' + resultDir)
+
+if __name__ == '__main__':
+    main()
