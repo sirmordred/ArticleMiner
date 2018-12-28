@@ -13,7 +13,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.chrome.options import Options
-from lxml import html
+from lxml import html # pip install lxml
 from cStringIO import StringIO
 from pdfminer.pdfinterp import PDFResourceManager, PDFPageInterpreter  # pip install pdfminer
 from pdfminer.converter import TextConverter
@@ -118,6 +118,7 @@ def download_articles(author):
         except TimeoutException:
             print ("Loading took too much time!")
         pageSource = browser.page_source
+        browser.close() # close chromedriver instance
         if pageSource != "": # if result page source is not empty
             htmlRet = html.fromstring(pageSource) # convert it to html object
             links = htmlRet.xpath('//a/@href') # get all urls which are in href attributes of html object
@@ -262,7 +263,6 @@ def prepareChromedriver():
     chromedriverbin_path = ""
     chromedriver_name = ""
     chromedriver_download_url = ""
-    osType = 0
     if 'Linux' in osName:
         chromedriver_name = "chromedriver"
         chromedriverbin_path = os.path.join(os.getcwd(), chromedriver_name)
@@ -271,20 +271,22 @@ def prepareChromedriver():
         chromedriver_name = "chromedriver"
         chromedriverbin_path = os.path.join(os.getcwd(), chromedriver_name)
         chromedriver_download_url = "https://chromedriver.storage.googleapis.com/2.45/chromedriver_mac64.zip"
-        osType = 1
     else: # windows
         chromedriver_name = "chromedriver.exe"
         chromedriverbin_path = os.path.join(os.getcwd(), chromedriver_name)
         chromedriver_download_url = "https://chromedriver.storage.googleapis.com/2.45/chromedriver_win32.zip"
-        osType = 2
 
     if not os.path.exists(chromedriverbin_path): # check existence
         print('Downloading chromedriver...')
         downloadedFName = wget.download(chromedriver_download_url)
-        with ZipFile(os.path.join(os.getcwd(), downloadedFName), 'r') as zip_ref:
-            zip_ref.extractall(os.getcwd())
-        st = os.stat(chromedriver_name)
-        os.chmod(chromedriver_name, st.st_mode | 0111) # make it executable by everyone
+        try:
+            with ZipFile(os.path.join(os.getcwd(), downloadedFName), 'r') as zip_ref:
+                zip_ref.extractall(os.getcwd())
+            st = os.stat(chromedriver_name)
+            os.chmod(chromedriver_name, st.st_mode | 0111) # make it executable by everyone
+        except:
+            print('\nERROR: Path of folder which contains script has non-ascii character, Please put script to proper directory (e.g C:/TestFolder/ArticleMiner.py)')
+            exit()
 
     return chromedriverbin_path
 
